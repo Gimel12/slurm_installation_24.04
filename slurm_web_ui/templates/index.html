@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Slurm Web UI</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+    <style>
+        body {
+            padding: 2rem;
+        }
+        .container {
+            max-width: 1200px;
+        }
+        h1, h2 {
+            text-align: center;
+        }
+        table {
+            margin-bottom: 2rem;
+        }
+        textarea {
+            font-family: monospace;
+            height: 250px;
+        }
+        .error {
+            color: #d32f2f;
+            background-color: #ffcdd2;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <main class="container">
+        <header>
+            <h1>Bizon Slurm clUSTER dashboard</h1>
+        </header>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <section id="nodes">
+            <h2>Node Status</h2>
+            <div style="overflow-x:auto;">
+                {{ nodes_table|safe }}
+            </div>
+        </section>
+
+        <section id="jobs">
+            <h2>Job Queue</h2>
+            <div style="overflow-x:auto;">
+                {{ jobs_table|safe }}
+            </div>
+        </section>
+
+        <section id="submission">
+            <h2>Submit a New Job</h2>
+            <form action="/submit" method="post">
+                <label for="job_script">Paste your sbatch script below:</label>
+                <textarea id="job_script" name="job_script" required placeholder="#!/bin/bash\n#SBATCH --job-name=my-job\n#SBATCH --output=my-job-%j.out\n\nsrun hostname"></textarea>
+                <button type="submit">Submit Job</button>
+            </form>
+        </section>
+
+        
+    </main>
+</body>
+</html>

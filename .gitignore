@@ -1,0 +1,16 @@
+# Slurm and Munge source files
+slurm-*.tar.bz2
+munge-*.tar.xz
+
+# Slurm log and output files
+*.out
+*.log
+
+# Python cache
+__pycache__/
+*.pyc
+
+# IDE and OS files
+.idea/
+.vscode/
+.DS_Store
