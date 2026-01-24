@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}Storage - Slurm Manager{% endblock %}
+{% block header %}Storage & NFS{% endblock %}
+{% block subheader %}Monitor disk usage and network file shares{% endblock %}
+
+{% block content %}
+<!-- Disk Usage -->
+<div class="card p-6 mb-6">
+    <h3 class="text-lg font-bold flex items-center gap-3 mb-6">
+        <i class="fas fa-hdd text-blue-500"></i>
+        Disk Usage
+    </h3>
+    
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {% for disk in storage.disk_usage %}
+        <div class="bg-gray-800/50 rounded-xl p-6">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-xl flex items-center justify-center
+                        {% if disk.percent > 90 %}bg-red-500/20{% elif disk.percent > 70 %}bg-yellow-500/20{% else %}bg-blue-500/20{% endif %}">
+                        <i class="fas fa-folder 
+                            {% if disk.percent > 90 %}text-red-500{% elif disk.percent > 70 %}text-yellow-500{% else %}text-blue-500{% endif %} text-xl"></i>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-lg">{{ disk.mount }}</h4>
+                        <p class="text-sm text-gray-400">Mount point</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mb-4">
+                <div class="flex justify-between text-sm mb-2">
+                    <span>{{ disk.used }} GB used</span>
+                    <span>{{ disk.total }} GB total</span>
+                </div>
+                <div class="storage-bar h-4">
+                    <div class="storage-fill h-full rounded
+                        {% if disk.percent > 90 %}bg-red-500{% elif disk.percent > 70 %}bg-yellow-500{% else %}bg-blue-500{% endif %}" 
+                        style="width: {{ disk.percent }}%"></div>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4 text-center">
+                <div class="bg-gray-900/50 rounded-lg p-3">
+                    <p class="text-2xl font-bold {% if disk.percent > 90 %}text-red-500{% elif disk.percent > 70 %}text-yellow-500{% else %}text-green-500{% endif %}">{{ disk.percent }}%</p>
+                    <p class="text-xs text-gray-400">Used</p>
+                </div>
+                <div class="bg-gray-900/50 rounded-lg p-3">
+                    <p class="text-2xl font-bold text-green-500">{{ disk.free }} GB</p>
+                    <p class="text-xs text-gray-400">Free</p>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="col-span-3 text-center text-gray-400 py-8">
+            <i class="fas fa-hdd text-4xl mb-4"></i>
+            <p>No disk information available</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- NFS Exports (Server) -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <div class="card p-6">
+        <h3 class="text-lg font-bold flex items-center gap-3 mb-6">
+            <i class="fas fa-share-nodes text-green-500"></i>
+            NFS Exports (This Server)
+        </h3>
+        
+        {% if storage.nfs_exports %}
+        <div class="space-y-3">
+            {% for export in storage.nfs_exports %}
+            <div class="bg-gray-800/50 rounded-lg p-4">
+                <div class="flex items-start gap-3">
+                    <i class="fas fa-folder-open text-green-400 mt-1"></i>
+                    <div class="flex-1">
+                        <code class="text-sm text-green-400 break-all">{{ export }}</code>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <p class="text-sm text-gray-400 mt-4">
+            <i class="fas fa-info-circle mr-1"></i>
+            These directories are shared with compute nodes via NFS.
+        </p>
+        {% else %}
+        <div class="text-center py-8 text-gray-400">
+            <i class="fas fa-share-nodes text-4xl mb-4 opacity-50"></i>
+            <p>No NFS exports configured</p>
+            <p class="text-sm mt-2">Run configure_master_node.sh to set up NFS sharing</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- NFS Mounts (Client) -->
+    <div class="card p-6">
+        <h3 class="text-lg font-bold flex items-center gap-3 mb-6">
+            <i class="fas fa-network-wired text-purple-500"></i>
+            NFS Mounts (Remote)
+        </h3>
+        
+        {% if storage.nfs_mounts %}
+        <div class="space-y-3">
+            {% for mount in storage.nfs_mounts %}
+            <div class="bg-gray-800/50 rounded-lg p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="font-semibold text-purple-400">{{ mount.mount_point }}</span>
+                    <span class="status-badge status-online">Mounted</span>
+                </div>
+                <p class="text-sm text-gray-400">
+                    <i class="fas fa-server mr-1"></i>
+                    {{ mount.source }}
+                </p>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-8 text-gray-400">
+            <i class="fas fa-network-wired text-4xl mb-4 opacity-50"></i>
+            <p>No remote NFS mounts</p>
+            <p class="text-sm mt-2">This is normal for the master node</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Storage Tips -->
+<div class="card p-6 mt-6">
+    <h3 class="text-lg font-bold flex items-center gap-3 mb-4">
+        <i class="fas fa-lightbulb text-yellow-500"></i>
+        Storage Best Practices
+    </h3>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-gray-800/30 rounded-lg p-4">
+            <h4 class="font-semibold mb-2"><i class="fas fa-home text-blue-400 mr-2"></i>/home</h4>
+            <p class="text-sm text-gray-400">Shared via NFS to all nodes. Store job scripts and small data files here.</p>
+        </div>
+        <div class="bg-gray-800/30 rounded-lg p-4">
+            <h4 class="font-semibold mb-2"><i class="fas fa-clock text-orange-400 mr-2"></i>/tmp</h4>
+            <p class="text-sm text-gray-400">Local to each node. Use for temporary job files that don't need to persist.</p>
+        </div>
+        <div class="bg-gray-800/30 rounded-lg p-4">
+            <h4 class="font-semibold mb-2"><i class="fas fa-database text-green-400 mr-2"></i>/data</h4>
+            <p class="text-sm text-gray-400">Consider adding a shared /data directory for large datasets.</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

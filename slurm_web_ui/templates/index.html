@@ -1,74 +1,352 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Slurm Web UI</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css">
+    <title>Slurm Cluster Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-card: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --accent-blue: #3b82f6;
+            --accent-green: #22c55e;
+            --accent-yellow: #eab308;
+            --accent-red: #ef4444;
+            --accent-purple: #a855f7;
+        }
         body {
-            padding: 2rem;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
         }
-        .container {
-            max-width: 1200px;
+        .glass-card {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 16px;
         }
-        h1, h2 {
-            text-align: center;
+        .stat-card {
+            background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-card) 100%);
+            border-radius: 16px;
+            transition: transform 0.2s, box-shadow 0.2s;
         }
-        table {
-            margin-bottom: 2rem;
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+        .stat-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .table-container {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            overflow: hidden;
+        }
+        .table-container table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .table-container th {
+            background: var(--bg-card);
+            padding: 16px;
+            text-align: left;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            font-size: 12px;
+            letter-spacing: 0.05em;
+        }
+        .table-container td {
+            padding: 16px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+        }
+        .table-container tr:hover {
+            background: rgba(59, 130, 246, 0.1);
+        }
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        .status-idle { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+        .status-alloc, .status-mixed { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+        .status-down, .status-drain { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+        .status-running { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+        .status-pending { background: rgba(234, 179, 8, 0.2); color: #eab308; }
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-weight: 600;
+            transition: all 0.2s;
+            border: none;
+            cursor: pointer;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
+        }
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 12px;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+        .btn-danger:hover {
+            background: rgba(239, 68, 68, 0.4);
         }
         textarea {
-            font-family: monospace;
-            height: 250px;
+            background: var(--bg-card);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-family: 'JetBrains Mono', monospace;
+            padding: 16px;
+            width: 100%;
+            min-height: 200px;
+            resize: vertical;
         }
-        .error {
-            color: #d32f2f;
-            background-color: #ffcdd2;
-            padding: 1rem;
-            border-radius: 4px;
-            margin-bottom: 1rem;
+        textarea:focus {
+            outline: none;
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+        }
+        .flash-message {
+            padding: 16px 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .flash-success {
+            background: rgba(34, 197, 94, 0.2);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            color: #22c55e;
+        }
+        .flash-error {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+        }
+        .refresh-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .nav-header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
         }
     </style>
 </head>
-<body>
-    <main class="container">
-        <header>
-            <h1>Bizon Slurm clUSTER dashboard</h1>
-        </header>
+<body class="min-h-screen">
+    <!-- Navigation -->
+    <nav class="nav-header px-6 py-4">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-server text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold">Slurm Cluster</h1>
+                    <p class="text-sm text-gray-400">Dashboard</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-6">
+                <div class="refresh-indicator">
+                    <span class="w-2 h-2 bg-green-500 rounded-full pulse"></span>
+                    <span>Auto-refresh: <span id="countdown">30</span>s</span>
+                </div>
+                <button onclick="location.reload()" class="text-gray-400 hover:text-white transition">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
 
+    <main class="max-w-7xl mx-auto px-6 py-8">
+        <!-- Flash Messages -->
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    <div class="{{ category }}">{{ message }}</div>
+                    <div class="flash-message flash-{{ category }}">
+                        <i class="fas {{ 'fa-check-circle' if category == 'success' else 'fa-exclamation-circle' }}"></i>
+                        <span>{{ message }}</span>
+                    </div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
 
-        <section id="nodes">
-            <h2>Node Status</h2>
-            <div style="overflow-x:auto;">
-                {{ nodes_table|safe }}
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="stat-card p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm mb-1">Total Nodes</p>
+                        <p class="text-3xl font-bold">{{ stats.total_nodes }}</p>
+                    </div>
+                    <div class="stat-icon bg-blue-500 bg-opacity-20">
+                        <i class="fas fa-server text-blue-500 text-xl"></i>
+                    </div>
+                </div>
+                <p class="text-green-500 text-sm mt-4"><i class="fas fa-circle text-xs"></i> {{ stats.idle_nodes }} idle</p>
             </div>
-        </section>
 
-        <section id="jobs">
-            <h2>Job Queue</h2>
-            <div style="overflow-x:auto;">
+            <div class="stat-card p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm mb-1">Running Jobs</p>
+                        <p class="text-3xl font-bold">{{ stats.running_jobs }}</p>
+                    </div>
+                    <div class="stat-icon bg-green-500 bg-opacity-20">
+                        <i class="fas fa-play text-green-500 text-xl"></i>
+                    </div>
+                </div>
+                <p class="text-yellow-500 text-sm mt-4"><i class="fas fa-clock text-xs"></i> {{ stats.pending_jobs }} pending</p>
+            </div>
+
+            <div class="stat-card p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm mb-1">Total CPUs</p>
+                        <p class="text-3xl font-bold">{{ stats.total_cpus }}</p>
+                    </div>
+                    <div class="stat-icon bg-purple-500 bg-opacity-20">
+                        <i class="fas fa-microchip text-purple-500 text-xl"></i>
+                    </div>
+                </div>
+                <p class="text-gray-400 text-sm mt-4"><i class="fas fa-memory text-xs"></i> {{ stats.total_memory }} GB RAM</p>
+            </div>
+
+            <div class="stat-card p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm mb-1">Cluster Status</p>
+                        <p class="text-3xl font-bold text-green-500">{{ stats.cluster_status }}</p>
+                    </div>
+                    <div class="stat-icon bg-green-500 bg-opacity-20">
+                        <i class="fas fa-heart-pulse text-green-500 text-xl"></i>
+                    </div>
+                </div>
+                <p class="text-gray-400 text-sm mt-4"><i class="fas fa-clock text-xs"></i> {{ stats.uptime }}</p>
+            </div>
+        </div>
+
+        <!-- Two Column Layout -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <!-- Nodes Section -->
+            <div class="lg:col-span-2">
+                <div class="glass-card p-6">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-xl font-bold flex items-center gap-3">
+                            <i class="fas fa-server text-blue-500"></i>
+                            Node Status
+                        </h2>
+                        <span class="text-sm text-gray-400">{{ stats.total_nodes }} nodes</span>
+                    </div>
+                    <div class="table-container">
+                        {{ nodes_table|safe }}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Submit Job Section -->
+            <div class="lg:col-span-1">
+                <div class="glass-card p-6 h-full">
+                    <h2 class="text-xl font-bold flex items-center gap-3 mb-6">
+                        <i class="fas fa-paper-plane text-purple-500"></i>
+                        Submit Job
+                    </h2>
+                    <form action="/submit" method="post">
+                        <label class="block text-sm text-gray-400 mb-2">Batch Script</label>
+                        <textarea name="job_script" required placeholder="#!/bin/bash
+#SBATCH --job-name=my-job
+#SBATCH --output=output-%j.out
+#SBATCH --cpus-per-task=1
+
+srun hostname
+echo 'Job completed!'"></textarea>
+                        <button type="submit" class="btn-primary w-full mt-4">
+                            <i class="fas fa-rocket mr-2"></i> Submit Job
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Job Queue Section -->
+        <div class="glass-card p-6">
+            <div class="flex items-center justify-between mb-6">
+                <h2 class="text-xl font-bold flex items-center gap-3">
+                    <i class="fas fa-list-check text-green-500"></i>
+                    Job Queue
+                </h2>
+                <span class="text-sm text-gray-400">{{ stats.running_jobs + stats.pending_jobs }} active jobs</span>
+            </div>
+            <div class="table-container">
                 {{ jobs_table|safe }}
             </div>
-        </section>
-
-        <section id="submission">
-            <h2>Submit a New Job</h2>
-            <form action="/submit" method="post">
-                <label for="job_script">Paste your sbatch script below:</label>
-                <textarea id="job_script" name="job_script" required placeholder="#!/bin/bash\n#SBATCH --job-name=my-job\n#SBATCH --output=my-job-%j.out\n\nsrun hostname"></textarea>
-                <button type="submit">Submit Job</button>
-            </form>
-        </section>
-
-        
+        </div>
     </main>
+
+    <!-- Footer -->
+    <footer class="text-center py-6 text-gray-500 text-sm">
+        <p>Slurm Cluster Dashboard &copy; 2026 | Master Node: {{ stats.master_node }}</p>
+    </footer>
+
+    <script>
+        // Auto-refresh countdown
+        let seconds = 30;
+        const countdownEl = document.getElementById('countdown');
+        setInterval(() => {
+            seconds--;
+            countdownEl.textContent = seconds;
+            if (seconds <= 0) {
+                location.reload();
+            }
+        }, 1000);
+
+        // Add status badges to table cells
+        document.querySelectorAll('td').forEach(td => {
+            const text = td.textContent.trim().toLowerCase();
+            if (['idle', 'up'].includes(text)) {
+                td.innerHTML = `<span class="status-badge status-idle">${td.textContent}</span>`;
+            } else if (['alloc', 'allocated', 'mixed'].includes(text)) {
+                td.innerHTML = `<span class="status-badge status-alloc">${td.textContent}</span>`;
+            } else if (['down', 'drain', 'drained', 'fail'].includes(text)) {
+                td.innerHTML = `<span class="status-badge status-down">${td.textContent}</span>`;
+            } else if (text === 'r' || text === 'running') {
+                td.innerHTML = `<span class="status-badge status-running">Running</span>`;
+            } else if (text === 'pd' || text === 'pending') {
+                td.innerHTML = `<span class="status-badge status-pending">Pending</span>`;
+            }
+        });
+    </script>
 </body>
 </html>

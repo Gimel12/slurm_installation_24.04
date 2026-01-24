@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Slurm Cluster Manager{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-card: #334155;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --accent-blue: #3b82f6;
+            --accent-green: #22c55e;
+            --accent-yellow: #eab308;
+            --accent-red: #ef4444;
+            --accent-purple: #a855f7;
+        }
+        body { background: var(--bg-primary); color: var(--text-primary); }
+        .sidebar { background: var(--bg-secondary); min-height: 100vh; width: 260px; position: fixed; left: 0; top: 0; }
+        .main-content { margin-left: 260px; min-height: 100vh; }
+        .nav-item { padding: 12px 20px; display: flex; align-items: center; gap: 12px; color: var(--text-secondary); transition: all 0.2s; border-left: 3px solid transparent; }
+        .nav-item:hover { background: rgba(59, 130, 246, 0.1); color: var(--text-primary); }
+        .nav-item.active { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); border-left-color: var(--accent-blue); }
+        .card { background: var(--bg-secondary); border-radius: 16px; border: 1px solid rgba(148, 163, 184, 0.1); }
+        .stat-card { background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-card) 100%); border-radius: 16px; transition: transform 0.2s; }
+        .stat-card:hover { transform: translateY(-4px); }
+        .btn-primary { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; padding: 10px 20px; border-radius: 10px; font-weight: 600; transition: all 0.2s; }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3); }
+        .btn-secondary { background: var(--bg-card); color: var(--text-primary); padding: 8px 16px; border-radius: 8px; transition: all 0.2s; }
+        .btn-secondary:hover { background: #475569; }
+        .btn-danger { background: rgba(239, 68, 68, 0.2); color: #ef4444; padding: 6px 12px; border-radius: 8px; transition: all 0.2s; }
+        .btn-danger:hover { background: rgba(239, 68, 68, 0.4); }
+        .btn-success { background: rgba(34, 197, 94, 0.2); color: #22c55e; padding: 6px 12px; border-radius: 8px; transition: all 0.2s; }
+        .btn-success:hover { background: rgba(34, 197, 94, 0.4); }
+        .btn-warning { background: rgba(234, 179, 8, 0.2); color: #eab308; padding: 6px 12px; border-radius: 8px; transition: all 0.2s; }
+        .btn-warning:hover { background: rgba(234, 179, 8, 0.4); }
+        .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; }
+        .status-idle, .status-online { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+        .status-alloc, .status-mixed, .status-running { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+        .status-down, .status-drain, .status-failed { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+        .status-pending { background: rgba(234, 179, 8, 0.2); color: #eab308; }
+        .table-container { background: var(--bg-card); border-radius: 12px; overflow: hidden; }
+        .table-container table { width: 100%; border-collapse: collapse; }
+        .table-container th { background: rgba(0,0,0,0.2); padding: 14px 16px; text-align: left; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; font-size: 11px; letter-spacing: 0.05em; }
+        .table-container td { padding: 14px 16px; border-bottom: 1px solid rgba(148, 163, 184, 0.1); }
+        .table-container tr:hover { background: rgba(59, 130, 246, 0.05); }
+        .progress-bar { height: 8px; background: var(--bg-card); border-radius: 4px; overflow: hidden; }
+        .progress-fill { height: 100%; border-radius: 4px; transition: width 0.3s; }
+        .flash-message { padding: 14px 18px; border-radius: 10px; margin-bottom: 16px; display: flex; align-items: center; gap: 10px; }
+        .flash-success { background: rgba(34, 197, 94, 0.15); border: 1px solid rgba(34, 197, 94, 0.3); color: #22c55e; }
+        .flash-error { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444; }
+        textarea, input[type="text"], input[type="password"] { background: var(--bg-card); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 10px; color: var(--text-primary); padding: 12px 16px; width: 100%; }
+        textarea:focus, input:focus { outline: none; border-color: var(--accent-blue); box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2); }
+        .gpu-card { background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); border-radius: 12px; }
+        .storage-bar { height: 24px; background: var(--bg-card); border-radius: 6px; overflow: hidden; position: relative; }
+        .storage-fill { height: 100%; transition: width 0.3s; }
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .deploy-terminal { background: #000; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 13px; max-height: 400px; overflow-y: auto; }
+        .deploy-terminal .log-entry { margin: 4px 0; color: #22c55e; }
+    </style>
+</head>
+<body>
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+        <div class="p-6 border-b border-gray-700">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center">
+                    <i class="fas fa-server text-white"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg">Bizon Slurm Manager</h1>
+                    <p class="text-xs text-gray-400">Cluster Control Panel</p>
+                </div>
+            </div>
+        </div>
+        
+        <nav class="py-4">
+            <a href="/" class="nav-item {{ 'active' if page == 'dashboard' }}">
+                <i class="fas fa-chart-line w-5"></i>
+                <span>Dashboard</span>
+            </a>
+            <a href="/nodes" class="nav-item {{ 'active' if page == 'nodes' }}">
+                <i class="fas fa-server w-5"></i>
+                <span>Nodes</span>
+            </a>
+            <a href="/jobs" class="nav-item {{ 'active' if page == 'jobs' }}">
+                <i class="fas fa-tasks w-5"></i>
+                <span>Jobs</span>
+            </a>
+            <a href="/storage" class="nav-item {{ 'active' if page == 'storage' }}">
+                <i class="fas fa-hdd w-5"></i>
+                <span>Storage</span>
+            </a>
+            <a href="/deploy" class="nav-item {{ 'active' if page == 'deploy' }}">
+                <i class="fas fa-plus-circle w-5"></i>
+                <span>Deploy Worker</span>
+            </a>
+            <a href="/settings" class="nav-item {{ 'active' if page == 'settings' }}">
+                <i class="fas fa-cog w-5"></i>
+                <span>Settings</span>
+            </a>
+        </nav>
+        
+        <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-700">
+            <div class="flex items-center gap-3">
+                <span class="w-2 h-2 bg-green-500 rounded-full pulse"></span>
+                <span class="text-sm text-gray-400">Cluster Online</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <header class="px-8 py-4 border-b border-gray-800 flex items-center justify-between">
+            <div>
+                <h2 class="text-xl font-bold">{% block header %}Dashboard{% endblock %}</h2>
+                <p class="text-sm text-gray-400">{% block subheader %}Cluster overview and management{% endblock %}</p>
+            </div>
+            <div class="flex items-center gap-4">
+                <span class="text-sm text-gray-400">
+                    <i class="fas fa-clock mr-2"></i>
+                    <span id="current-time"></span>
+                </span>
+                <button onclick="location.reload()" class="btn-secondary">
+                    <i class="fas fa-sync-alt mr-2"></i>Refresh
+                </button>
+            </div>
+        </header>
+
+        <div class="p-8">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="flash-message flash-{{ category }}">
+                            <i class="fas {{ 'fa-check-circle' if category == 'success' else 'fa-exclamation-circle' }}"></i>
+                            <span>{{ message }}</span>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+            
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <script>
+        // Update current time
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('current-time').textContent = now.toLocaleTimeString();
+        }
+        updateTime();
+        setInterval(updateTime, 1000);
+        
+        // Auto-refresh every 30 seconds (disabled on deploy and node detail pages)
+        if (!window.location.pathname.includes('/deploy') && !window.location.pathname.includes('/node/')) {
+            setTimeout(() => location.reload(), 30000);
+        }
+    </script>
+    {% block scripts %}{% endblock %}
+
+    <!-- Footer -->
+    <footer class="fixed bottom-0 right-0 p-4 text-gray-500 text-xs" style="margin-left: 260px;">
+        Bizon Slurm Cluster Manager. Copyright © 2026.
+    </footer>
+</body>
+</html>

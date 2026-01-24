@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+
+{% block title %}Jobs - Slurm Manager{% endblock %}
+{% block header %}Job Management{% endblock %}
+{% block subheader %}Submit, monitor, and manage cluster jobs{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Job Queue -->
+    <div class="lg:col-span-2 card p-6">
+        <div class="flex items-center justify-between mb-6">
+            <h3 class="text-lg font-bold flex items-center gap-3">
+                <i class="fas fa-list-check text-green-500"></i>
+                Job Queue
+            </h3>
+            <span class="text-sm text-gray-400">{{ jobs|length }} jobs</span>
+        </div>
+        
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Job ID</th>
+                        <th>Name</th>
+                        <th>User</th>
+                        <th>Partition</th>
+                        <th>State</th>
+                        <th>Time</th>
+                        <th>Nodes</th>
+                        <th>CPUs</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for job in jobs %}
+                    <tr>
+                        <td class="font-mono font-bold">{{ job.job_id }}</td>
+                        <td>{{ job.name }}</td>
+                        <td>{{ job.user }}</td>
+                        <td>{{ job.partition }}</td>
+                        <td>
+                            <span class="status-badge status-{{ job.state|lower }}">{{ job.state }}</span>
+                        </td>
+                        <td class="font-mono text-sm">{{ job.time }}</td>
+                        <td>{{ job.nodes }}</td>
+                        <td>{{ job.cpus }}</td>
+                        <td>
+                            <a href="/cancel/{{ job.job_id }}" class="btn-danger text-xs" 
+                               onclick="return confirm('Cancel job {{ job.job_id }}?')">
+                                <i class="fas fa-times mr-1"></i>Cancel
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="9" class="text-center text-gray-400 py-12">
+                            <i class="fas fa-inbox text-4xl mb-4 block"></i>
+                            No jobs in queue
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Submit Job Panel -->
+    <div class="card p-6">
+        <h3 class="text-lg font-bold flex items-center gap-3 mb-6">
+            <i class="fas fa-paper-plane text-purple-500"></i>
+            Submit New Job
+        </h3>
+        
+        <form action="/submit" method="post">
+            <div class="mb-4">
+                <label class="block text-sm text-gray-400 mb-2">Job Script</label>
+                <textarea name="job_script" rows="15" required 
+                    class="font-mono text-sm"
+                    placeholder="#!/bin/bash
+#SBATCH --job-name=my-job
+#SBATCH --output=output-%j.out
+#SBATCH --error=error-%j.err
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=1
+#SBATCH --time=01:00:00
+
+echo 'Starting job...'
+srun hostname
+echo 'Job completed!'"></textarea>
+            </div>
+            
+            <button type="submit" class="btn-primary w-full">
+                <i class="fas fa-rocket mr-2"></i>Submit Job
+            </button>
+        </form>
+        
+        <!-- Quick Templates -->
+        <div class="mt-6 pt-6 border-t border-gray-700">
+            <h4 class="text-sm font-semibold text-gray-400 mb-3">Quick Templates</h4>
+            <div class="space-y-2">
+                <button onclick="loadTemplate('basic')" class="w-full text-left p-3 bg-gray-800/50 rounded-lg hover:bg-gray-800 transition text-sm">
+                    <i class="fas fa-file-code text-blue-400 mr-2"></i>Basic Job
+                </button>
+                <button onclick="loadTemplate('parallel')" class="w-full text-left p-3 bg-gray-800/50 rounded-lg hover:bg-gray-800 transition text-sm">
+                    <i class="fas fa-layer-group text-green-400 mr-2"></i>Parallel Job
+                </button>
+                <button onclick="loadTemplate('gpu')" class="w-full text-left p-3 bg-gray-800/50 rounded-lg hover:bg-gray-800 transition text-sm">
+                    <i class="fas fa-microchip text-purple-400 mr-2"></i>GPU Job
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Job Statistics -->
+<div class="card p-6 mt-6">
+    <h3 class="text-lg font-bold mb-4">Job Statistics</h3>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="text-center p-4 bg-green-500/10 rounded-xl border border-green-500/20">
+            <p class="text-3xl font-bold text-green-500">{{ jobs|selectattr('state', 'equalto', 'RUNNING')|list|length }}</p>
+            <p class="text-sm text-gray-400">Running</p>
+        </div>
+        <div class="text-center p-4 bg-yellow-500/10 rounded-xl border border-yellow-500/20">
+            <p class="text-3xl font-bold text-yellow-500">{{ jobs|selectattr('state', 'equalto', 'PENDING')|list|length }}</p>
+            <p class="text-sm text-gray-400">Pending</p>
+        </div>
+        <div class="text-center p-4 bg-blue-500/10 rounded-xl border border-blue-500/20">
+            <p class="text-3xl font-bold text-blue-500">{{ jobs|length }}</p>
+            <p class="text-sm text-gray-400">Total Active</p>
+        </div>
+        <div class="text-center p-4 bg-purple-500/10 rounded-xl border border-purple-500/20">
+            <p class="text-3xl font-bold text-purple-500">{{ jobs|map(attribute='cpus')|map('int', default=0)|sum }}</p>
+            <p class="text-sm text-gray-400">CPUs in Use</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const templates = {
+    basic: `#!/bin/bash
+#SBATCH --job-name=basic-job
+#SBATCH --output=output-%j.out
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=1
+#SBATCH --time=00:30:00
+
+echo "Starting on $(hostname)"
+echo "Job ID: $SLURM_JOB_ID"
+
+# Your commands here
+sleep 10
+echo "Done!"`,
+    
+    parallel: `#!/bin/bash
+#SBATCH --job-name=parallel-job
+#SBATCH --output=output-%j.out
+#SBATCH --ntasks=4
+#SBATCH --cpus-per-task=2
+#SBATCH --time=01:00:00
+
+echo "Running parallel job on $SLURM_NTASKS tasks"
+srun hostname
+echo "All tasks completed!"`,
+    
+    gpu: `#!/bin/bash
+#SBATCH --job-name=gpu-job
+#SBATCH --output=output-%j.out
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1
+#SBATCH --time=02:00:00
+
+echo "GPU Job starting..."
+nvidia-smi
+echo "GPU Job completed!"`
+};
+
+function loadTemplate(name) {
+    document.querySelector('textarea[name="job_script"]').value = templates[name];
+}
+</script>
+{% endblock %}

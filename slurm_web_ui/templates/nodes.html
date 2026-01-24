@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Nodes - Slurm Manager{% endblock %}
+{% block header %}Compute Nodes{% endblock %}
+{% block subheader %}Manage and monitor all cluster nodes{% endblock %}
+
+{% block content %}
+<!-- Node Cards Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    {% for node in nodes %}
+    <div class="card p-6 hover:border-blue-500/50 transition-all">
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center
+                    {% if 'idle' in node.State|lower %}bg-green-500/20{% elif 'alloc' in node.State|lower or 'mix' in node.State|lower %}bg-blue-500/20{% else %}bg-red-500/20{% endif %}">
+                    <i class="fas fa-server 
+                        {% if 'idle' in node.State|lower %}text-green-500{% elif 'alloc' in node.State|lower or 'mix' in node.State|lower %}text-blue-500{% else %}text-red-500{% endif %}"></i>
+                </div>
+                <div>
+                    <h3 class="font-bold">{{ node.NodeName }}</h3>
+                    <span class="status-badge status-{{ node.State|lower }}">{{ node.State }}</span>
+                </div>
+            </div>
+            <a href="/node/{{ node.NodeName }}" class="text-gray-400 hover:text-white">
+                <i class="fas fa-arrow-right"></i>
+            </a>
+        </div>
+        
+        <!-- Resource Bars -->
+        <div class="space-y-4">
+            <!-- CPU -->
+            <div>
+                <div class="flex justify-between text-sm mb-1">
+                    <span class="text-gray-400">CPU</span>
+                    <span>{{ node.CPUAlloc or 0 }} / {{ node.CPUTot or 0 }} cores</span>
+                </div>
+                <div class="progress-bar">
+                    {% set cpu_percent = ((node.CPUAlloc|int / node.CPUTot|int) * 100) if node.CPUTot|int > 0 else 0 %}
+                    <div class="progress-fill bg-blue-500" style="width: {{ cpu_percent }}%"></div>
+                </div>
+            </div>
+            
+            <!-- Memory -->
+            <div>
+                <div class="flex justify-between text-sm mb-1">
+                    <span class="text-gray-400">Memory</span>
+                    <span>{{ node.memory_gb }} GB</span>
+                </div>
+                <div class="progress-bar">
+                    {% set mem_percent = ((node.AllocMem|int / node.RealMemory|int) * 100) if node.RealMemory|int > 0 else 0 %}
+                    <div class="progress-fill bg-purple-500" style="width: {{ mem_percent }}%"></div>
+                </div>
+            </div>
+            
+            <!-- GPU if present -->
+            {% if node.gpu_count %}
+            <div class="gpu-card p-3 mt-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-microchip text-purple-400"></i>
+                        <span class="text-sm">{{ node.gpu_type|default('GPU') }}</span>
+                    </div>
+                    <span class="text-lg font-bold">{{ node.gpu_count }}</span>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- Actions -->
+        <div class="flex gap-2 mt-4 pt-4 border-t border-gray-700">
+            {% if 'idle' in node.State|lower or 'alloc' in node.State|lower %}
+            <a href="/node/{{ node.NodeName }}/action/drain" class="btn-warning text-xs flex-1 text-center">
+                <i class="fas fa-pause mr-1"></i>Drain
+            </a>
+            {% endif %}
+            {% if 'drain' in node.State|lower or 'down' in node.State|lower %}
+            <a href="/node/{{ node.NodeName }}/action/resume" class="btn-success text-xs flex-1 text-center">
+                <i class="fas fa-play mr-1"></i>Resume
+            </a>
+            <a href="/node/{{ node.NodeName }}/action/idle" class="btn-primary text-xs flex-1 text-center">
+                <i class="fas fa-check mr-1"></i>Set Idle
+            </a>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <div class="col-span-3 card p-12 text-center">
+        <i class="fas fa-server text-4xl text-gray-600 mb-4"></i>
+        <p class="text-gray-400">No nodes found in the cluster</p>
+        <a href="/deploy" class="btn-primary mt-4 inline-block">
+            <i class="fas fa-plus mr-2"></i>Deploy First Node
+        </a>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Summary -->
+<div class="card p-6 mt-8">
+    <h3 class="text-lg font-bold mb-4">Node Summary</h3>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="text-center p-4 bg-gray-800/50 rounded-xl">
+            <p class="text-3xl font-bold text-blue-500">{{ nodes|length }}</p>
+            <p class="text-sm text-gray-400">Total Nodes</p>
+        </div>
+        <div class="text-center p-4 bg-gray-800/50 rounded-xl">
+            <p class="text-3xl font-bold text-green-500">{{ nodes|selectattr('State', 'equalto', 'idle')|list|length }}</p>
+            <p class="text-sm text-gray-400">Idle</p>
+        </div>
+        <div class="text-center p-4 bg-gray-800/50 rounded-xl">
+            <p class="text-3xl font-bold text-purple-500">{{ nodes|map(attribute='CPUTot')|map('int')|sum }}</p>
+            <p class="text-sm text-gray-400">Total CPUs</p>
+        </div>
+        <div class="text-center p-4 bg-gray-800/50 rounded-xl">
+            <p class="text-3xl font-bold text-orange-500">{{ nodes|map(attribute='memory_gb')|sum|round(1) }} GB</p>
+            <p class="text-sm text-gray-400">Total Memory</p>
+        </div>
+    </div>
+</div>
+{% endblock %}

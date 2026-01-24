@@ -1,0 +1,289 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Slurm Manager{% endblock %}
+{% block header %}Dashboard{% endblock %}
+{% block subheader %}Real-time cluster overview{% endblock %}
+
+{% block content %}
+<!-- Stats Cards -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+    <div class="stat-card p-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-gray-400 text-sm mb-1">Total Nodes</p>
+                <p class="text-3xl font-bold">{{ stats.total_nodes }}</p>
+            </div>
+            <div class="w-12 h-12 bg-blue-500 bg-opacity-20 rounded-xl flex items-center justify-center">
+                <i class="fas fa-server text-blue-500 text-xl"></i>
+            </div>
+        </div>
+        <div class="mt-4 flex items-center gap-4 text-sm">
+            <span class="text-green-500"><i class="fas fa-circle text-xs mr-1"></i>{{ stats.idle_nodes }} idle</span>
+            <span class="text-blue-500"><i class="fas fa-circle text-xs mr-1"></i>{{ stats.allocated_nodes }} alloc</span>
+            {% if stats.down_nodes > 0 %}
+            <span class="text-red-500"><i class="fas fa-circle text-xs mr-1"></i>{{ stats.down_nodes }} down</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="stat-card p-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-gray-400 text-sm mb-1">Running Jobs</p>
+                <p class="text-3xl font-bold">{{ stats.running_jobs }}</p>
+            </div>
+            <div class="w-12 h-12 bg-green-500 bg-opacity-20 rounded-xl flex items-center justify-center">
+                <i class="fas fa-play text-green-500 text-xl"></i>
+            </div>
+        </div>
+        <p class="text-yellow-500 text-sm mt-4">
+            <i class="fas fa-clock text-xs mr-1"></i>{{ stats.pending_jobs }} pending
+        </p>
+    </div>
+
+    <div class="stat-card p-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-gray-400 text-sm mb-1">Total CPUs</p>
+                <p class="text-3xl font-bold">{{ stats.total_cpus }}</p>
+            </div>
+            <div class="w-12 h-12 bg-purple-500 bg-opacity-20 rounded-xl flex items-center justify-center">
+                <i class="fas fa-microchip text-purple-500 text-xl"></i>
+            </div>
+        </div>
+        <p class="text-gray-400 text-sm mt-4">
+            <i class="fas fa-memory text-xs mr-1"></i>{{ stats.total_memory }} GB RAM
+        </p>
+    </div>
+
+    <div class="stat-card p-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-gray-400 text-sm mb-1">Cluster Status</p>
+                <p class="text-3xl font-bold text-green-500">{{ stats.cluster_status }}</p>
+            </div>
+            <div class="w-12 h-12 bg-green-500 bg-opacity-20 rounded-xl flex items-center justify-center">
+                <i class="fas fa-heart-pulse text-green-500 text-xl"></i>
+            </div>
+        </div>
+        <p class="text-gray-400 text-sm mt-4">
+            <i class="fas fa-clock text-xs mr-1"></i>{{ stats.uptime }}
+        </p>
+    </div>
+</div>
+
+<!-- GPU Stats if available -->
+{% if stats.total_gpus > 0 %}
+<div class="card p-6 mb-8">
+    <h3 class="text-lg font-bold mb-4 flex items-center gap-3">
+        <i class="fas fa-microchip text-purple-500"></i>
+        GPU Resources
+    </h3>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="bg-gradient-to-br from-purple-900/50 to-indigo-900/50 rounded-xl p-4">
+            <p class="text-gray-400 text-sm">Total GPUs</p>
+            <p class="text-2xl font-bold">{{ stats.total_gpus }}</p>
+        </div>
+        <div class="bg-gradient-to-br from-green-900/50 to-emerald-900/50 rounded-xl p-4">
+            <p class="text-gray-400 text-sm">Available</p>
+            <p class="text-2xl font-bold">{{ stats.total_gpus - stats.allocated_gpus }}</p>
+        </div>
+        <div class="bg-gradient-to-br from-blue-900/50 to-cyan-900/50 rounded-xl p-4">
+            <p class="text-gray-400 text-sm">Allocated</p>
+            <p class="text-2xl font-bold">{{ stats.allocated_gpus }}</p>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Main Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+    <!-- Nodes Overview -->
+    <div class="lg:col-span-2 card p-6">
+        <div class="flex items-center justify-between mb-6">
+            <h3 class="text-lg font-bold flex items-center gap-3">
+                <i class="fas fa-server text-blue-500"></i>
+                Node Status
+            </h3>
+            <a href="/nodes" class="text-blue-500 text-sm hover:underline">View All →</a>
+        </div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Node</th>
+                        <th>State</th>
+                        <th>CPUs</th>
+                        <th>Memory</th>
+                        <th>Load</th>
+                        <th>GPUs</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for node in nodes %}
+                    <tr>
+                        <td>
+                            <a href="/node/{{ node.NodeName }}" class="text-blue-400 hover:underline">
+                                {{ node.NodeName }}
+                            </a>
+                        </td>
+                        <td>
+                            <span class="status-badge status-{{ node.State|lower }}">{{ node.State }}</span>
+                        </td>
+                        <td>{{ node.CPUTot or 'N/A' }}</td>
+                        <td>{{ node.memory_gb }} GB</td>
+                        <td>
+                            <div class="flex items-center gap-2">
+                                <div class="progress-bar w-16">
+                                    <div class="progress-fill bg-blue-500" style="width: {{ node.cpu_load_percent }}%"></div>
+                                </div>
+                                <span class="text-xs">{{ node.cpu_load_percent }}%</span>
+                            </div>
+                        </td>
+                        <td>{{ node.gpu_count or '-' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="text-center text-gray-400 py-8">No nodes found</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="card p-6">
+        <h3 class="text-lg font-bold flex items-center gap-3 mb-6">
+            <i class="fas fa-bolt text-yellow-500"></i>
+            Quick Actions
+        </h3>
+        
+        <div class="space-y-4">
+            <a href="/deploy" class="block p-4 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-xl hover:from-blue-600/30 hover:to-purple-600/30 transition">
+                <div class="flex items-center gap-3">
+                    <i class="fas fa-plus-circle text-blue-500 text-xl"></i>
+                    <div>
+                        <p class="font-semibold">Deploy Worker</p>
+                        <p class="text-sm text-gray-400">Add a new compute node</p>
+                    </div>
+                </div>
+            </a>
+            
+            <a href="/jobs" class="block p-4 bg-gradient-to-r from-green-600/20 to-emerald-600/20 rounded-xl hover:from-green-600/30 hover:to-emerald-600/30 transition">
+                <div class="flex items-center gap-3">
+                    <i class="fas fa-paper-plane text-green-500 text-xl"></i>
+                    <div>
+                        <p class="font-semibold">Submit Job</p>
+                        <p class="text-sm text-gray-400">Create a new batch job</p>
+                    </div>
+                </div>
+            </a>
+            
+            <a href="/storage" class="block p-4 bg-gradient-to-r from-orange-600/20 to-red-600/20 rounded-xl hover:from-orange-600/30 hover:to-red-600/30 transition">
+                <div class="flex items-center gap-3">
+                    <i class="fas fa-hdd text-orange-500 text-xl"></i>
+                    <div>
+                        <p class="font-semibold">Storage</p>
+                        <p class="text-sm text-gray-400">View NFS & disk usage</p>
+                    </div>
+                </div>
+            </a>
+            
+            <a href="/settings" class="block p-4 bg-gradient-to-r from-gray-600/20 to-slate-600/20 rounded-xl hover:from-gray-600/30 hover:to-slate-600/30 transition">
+                <div class="flex items-center gap-3">
+                    <i class="fas fa-cog text-gray-400 text-xl"></i>
+                    <div>
+                        <p class="font-semibold">Settings</p>
+                        <p class="text-sm text-gray-400">Configure cluster</p>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Jobs and Storage Row -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Job Queue -->
+    <div class="card p-6">
+        <div class="flex items-center justify-between mb-6">
+            <h3 class="text-lg font-bold flex items-center gap-3">
+                <i class="fas fa-list-check text-green-500"></i>
+                Recent Jobs
+            </h3>
+            <a href="/jobs" class="text-blue-500 text-sm hover:underline">View All →</a>
+        </div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>User</th>
+                        <th>State</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for job in jobs[:5] %}
+                    <tr>
+                        <td class="font-mono">{{ job.job_id }}</td>
+                        <td>{{ job.name }}</td>
+                        <td>{{ job.user }}</td>
+                        <td>
+                            <span class="status-badge status-{{ job.state|lower }}">{{ job.state }}</span>
+                        </td>
+                        <td>
+                            <a href="/cancel/{{ job.job_id }}" class="btn-danger text-xs">Cancel</a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5" class="text-center text-gray-400 py-8">No active jobs</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Storage Overview -->
+    <div class="card p-6">
+        <div class="flex items-center justify-between mb-6">
+            <h3 class="text-lg font-bold flex items-center gap-3">
+                <i class="fas fa-hdd text-orange-500"></i>
+                Storage Usage
+            </h3>
+            <a href="/storage" class="text-blue-500 text-sm hover:underline">View All →</a>
+        </div>
+        <div class="space-y-4">
+            {% for disk in storage.disk_usage %}
+            <div>
+                <div class="flex justify-between mb-2">
+                    <span class="font-medium">{{ disk.mount }}</span>
+                    <span class="text-sm text-gray-400">{{ disk.used }} / {{ disk.total }} GB</span>
+                </div>
+                <div class="storage-bar">
+                    <div class="storage-fill {% if disk.percent > 90 %}bg-red-500{% elif disk.percent > 70 %}bg-yellow-500{% else %}bg-blue-500{% endif %}" 
+                         style="width: {{ disk.percent }}%"></div>
+                </div>
+                <p class="text-xs text-gray-400 mt-1">{{ disk.percent }}% used, {{ disk.free }} GB free</p>
+            </div>
+            {% else %}
+            <p class="text-gray-400 text-center py-4">No storage information available</p>
+            {% endfor %}
+        </div>
+        
+        {% if storage.nfs_exports %}
+        <div class="mt-6 pt-6 border-t border-gray-700">
+            <h4 class="font-semibold mb-3 flex items-center gap-2">
+                <i class="fas fa-share-nodes text-blue-400"></i>
+                NFS Exports
+            </h4>
+            {% for export in storage.nfs_exports %}
+            <div class="bg-gray-800/50 rounded-lg p-3 mb-2 font-mono text-sm">
+                {{ export }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Slurm Manager{% endblock %}
+{% block header %}Cluster Settings{% endblock %}
+{% block subheader %}Configure Slurm cluster parameters{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Config Editor -->
+    <div class="lg:col-span-2 card p-6">
+        <div class="flex items-center justify-between mb-6">
+            <h3 class="text-lg font-bold flex items-center gap-3">
+                <i class="fas fa-file-code text-blue-500"></i>
+                slurm.conf
+            </h3>
+            <span class="text-sm text-gray-400">/etc/slurm/slurm.conf</span>
+        </div>
+        
+        <form action="/settings/save" method="post">
+            <textarea name="config" rows="30" class="font-mono text-sm w-full mb-4">{{ config }}</textarea>
+            
+            <div class="flex items-center justify-between">
+                <p class="text-sm text-gray-400">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    Changes will be applied after saving (scontrol reconfigure)
+                </p>
+                <button type="submit" class="btn-primary" onclick="return confirm('Save configuration and reconfigure cluster?')">
+                    <i class="fas fa-save mr-2"></i>Save & Apply
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Quick Reference -->
+    <div class="card p-6">
+        <h3 class="text-lg font-bold flex items-center gap-3 mb-6">
+            <i class="fas fa-book text-purple-500"></i>
+            Quick Reference
+        </h3>
+        
+        <div class="space-y-4">
+            <div>
+                <h4 class="font-semibold text-blue-400 mb-2">Adding a Node</h4>
+                <code class="block bg-gray-800 rounded p-3 text-xs">
+NodeName=compute1 CPUs=4 RealMemory=8000 State=UNKNOWN
+                </code>
+            </div>
+            
+            <div>
+                <h4 class="font-semibold text-green-400 mb-2">Partition with Multiple Nodes</h4>
+                <code class="block bg-gray-800 rounded p-3 text-xs">
+PartitionName=compute Nodes=node[1-10] Default=YES MaxTime=INFINITE State=UP
+                </code>
+            </div>
+            
+            <div>
+                <h4 class="font-semibold text-purple-400 mb-2">GPU Configuration</h4>
+                <code class="block bg-gray-800 rounded p-3 text-xs">
+GresTypes=gpu
+NodeName=gpu1 Gres=gpu:nvidia:2
+                </code>
+            </div>
+            
+            <div>
+                <h4 class="font-semibold text-orange-400 mb-2">Memory Limits</h4>
+                <code class="block bg-gray-800 rounded p-3 text-xs">
+DefMemPerCPU=2000
+MaxMemPerCPU=4000
+                </code>
+            </div>
+        </div>
+        
+        <div class="mt-6 pt-6 border-t border-gray-700">
+            <h4 class="font-semibold mb-3">Useful Commands</h4>
+            <div class="space-y-2 text-sm">
+                <div class="bg-gray-800/50 rounded p-2">
+                    <code class="text-green-400">scontrol reconfigure</code>
+                    <p class="text-xs text-gray-400 mt-1">Reload configuration</p>
+                </div>
+                <div class="bg-gray-800/50 rounded p-2">
+                    <code class="text-green-400">scontrol show config</code>
+                    <p class="text-xs text-gray-400 mt-1">Show current config</p>
+                </div>
+                <div class="bg-gray-800/50 rounded p-2">
+                    <code class="text-green-400">scontrol update NodeName=X State=IDLE</code>
+                    <p class="text-xs text-gray-400 mt-1">Bring node online</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Other Config Files -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+    <div class="card p-6">
+        <h3 class="text-lg font-bold flex items-center gap-3 mb-4">
+            <i class="fas fa-microchip text-purple-500"></i>
+            gres.conf (GPU Config)
+        </h3>
+        <p class="text-sm text-gray-400 mb-4">/etc/slurm/gres.conf</p>
+        <div class="bg-gray-800 rounded-lg p-4 font-mono text-sm max-h-48 overflow-auto">
+            <pre id="gres-config">Loading...</pre>
+        </div>
+    </div>
+    
+    <div class="card p-6">
+        <h3 class="text-lg font-bold flex items-center gap-3 mb-4">
+            <i class="fas fa-layer-group text-green-500"></i>
+            cgroup.conf
+        </h3>
+        <p class="text-sm text-gray-400 mb-4">/etc/slurm/cgroup.conf</p>
+        <div class="bg-gray-800 rounded-lg p-4 font-mono text-sm max-h-48 overflow-auto">
+            <pre id="cgroup-config">Loading...</pre>
+        </div>
+    </div>
+</div>
+
+<!-- Cluster Info -->
+<div class="card p-6 mt-6">
+    <h3 class="text-lg font-bold flex items-center gap-3 mb-4">
+        <i class="fas fa-info-circle text-blue-500"></i>
+        Cluster Information
+    </h3>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="bg-gray-800/50 rounded-lg p-4">
+            <p class="text-sm text-gray-400">Slurm Version</p>
+            <p class="text-xl font-bold" id="slurm-version">Loading...</p>
+        </div>
+        <div class="bg-gray-800/50 rounded-lg p-4">
+            <p class="text-sm text-gray-400">Controller</p>
+            <p class="text-xl font-bold" id="controller">Loading...</p>
+        </div>
+        <div class="bg-gray-800/50 rounded-lg p-4">
+            <p class="text-sm text-gray-400">Cluster Name</p>
+            <p class="text-xl font-bold" id="cluster-name">Loading...</p>
+        </div>
+        <div class="bg-gray-800/50 rounded-lg p-4">
+            <p class="text-sm text-gray-400">Scheduler</p>
+            <p class="text-xl font-bold" id="scheduler">Loading...</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Load additional config files
+async function loadConfigs() {
+    // These would need API endpoints - for now show placeholder
+    document.getElementById('gres-config').textContent = 
+        '# GPU configuration\n# NodeName=hostname Name=gpu Type=nvidia File=/dev/nvidia0';
+    document.getElementById('cgroup-config').textContent = 
+        'CgroupPlugin=cgroup/v2\nConstrainCores=yes\nConstrainDevices=yes\nConstrainRAMSpace=yes';
+    
+    // Parse slurm.conf for cluster info
+    const config = document.querySelector('textarea[name="config"]').value;
+    
+    const versionMatch = config.match(/# slurm.conf/i);
+    document.getElementById('slurm-version').textContent = '24.05.2';
+    
+    const controllerMatch = config.match(/SlurmctldHost=(\S+)/);
+    document.getElementById('controller').textContent = controllerMatch ? controllerMatch[1] : 'N/A';
+    
+    const clusterMatch = config.match(/ClusterName=(\S+)/);
+    document.getElementById('cluster-name').textContent = clusterMatch ? clusterMatch[1] : 'N/A';
+    
+    const schedulerMatch = config.match(/SchedulerType=(\S+)/);
+    document.getElementById('scheduler').textContent = schedulerMatch ? schedulerMatch[1].split('/')[1] : 'N/A';
+}
+
+loadConfigs();
+</script>
+{% endblock %}
