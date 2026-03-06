@@ -76,37 +76,58 @@ def get_cluster_stats():
         'allocated_gpus': 0
     }
     
-    # Get node info
-    output, _ = run_slurm_command("sinfo -h -o '%D %C %m %T %G'")
+    # Get per-node info for accurate totals
+    output, _ = run_slurm_command("sinfo -N -h -o '%N %C %m %T %G'")
     if output:
+        seen_nodes = set()
         for line in output.strip().split('\n'):
             parts = line.split()
             if len(parts) >= 4:
-                node_count = int(parts[0])
-                stats['total_nodes'] += node_count
+                node_name = parts[0]
+                # Skip duplicate nodes (can appear multiple times in output)
+                if node_name in seen_nodes:
+                    continue
+                seen_nodes.add(node_name)
+                
+                stats['total_nodes'] += 1
+                
+                # CPU info: allocated/idle/other/total
                 cpu_info = parts[1].split('/')
                 if len(cpu_info) == 4:
                     stats['allocated_cpus'] += int(cpu_info[0])
-                    stats['total_cpus'] = int(cpu_info[3])
+                    stats['total_cpus'] += int(cpu_info[3])
+                
+                # Memory (sum all nodes)
                 try:
-                    stats['total_memory'] = round(int(parts[2]) / 1024, 1)
+                    stats['total_memory'] += int(parts[2])
                 except:
                     pass
+                
+                # Node state
                 state = parts[3].lower()
                 if 'idle' in state:
-                    stats['idle_nodes'] += node_count
+                    stats['idle_nodes'] += 1
                 elif 'alloc' in state or 'mix' in state:
-                    stats['allocated_nodes'] += node_count
+                    stats['allocated_nodes'] += 1
                 elif 'down' in state or 'drain' in state:
-                    stats['down_nodes'] += node_count
-                # GPU info
-                if len(parts) >= 5 and 'gpu' in parts[4].lower():
-                    try:
-                        gpu_part = parts[4].split(':')
-                        if len(gpu_part) >= 2:
-                            stats['total_gpus'] += int(gpu_part[-1].split('(')[0])
-                    except:
-                        pass
+                    stats['down_nodes'] += 1
+                
+                # GPU info - parse Gres field like "gpu:RTX-4090:7"
+                if len(parts) >= 5:
+                    gres = parts[4]
+                    if 'gpu' in gres.lower():
+                        try:
+                            # Format: gpu:TYPE:COUNT or gpu:COUNT
+                            gpu_parts = gres.split(':')
+                            if len(gpu_parts) >= 2:
+                                # Last part should be the count (may have suffix)
+                                count_str = gpu_parts[-1].split('(')[0]
+                                stats['total_gpus'] += int(count_str)
+                        except:
+                            pass
+    
+    # Convert memory to GB
+    stats['total_memory'] = round(stats['total_memory'] / 1024, 1)
     
     # Get job counts
     output, _ = run_slurm_command("squeue -h -t running | wc -l")
