@@ -662,7 +662,8 @@ def gpus_page():
         
         # For now, try to get GPU info - this works for accessible nodes
         try:
-            cmd = f"ssh -o ConnectTimeout=3 -o StrictHostKeyChecking=no {node_addr} 'nvidia-smi --query-gpu=index,name,temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw --format=csv,noheader,nounits' 2>/dev/null"
+            # Try with bizon user for SSH access
+            cmd = f"ssh -o ConnectTimeout=3 -o StrictHostKeyChecking=no -o BatchMode=yes bizon@{node_addr} 'nvidia-smi --query-gpu=index,name,temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw --format=csv,noheader,nounits' 2>/dev/null"
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
             if result.returncode == 0 and result.stdout.strip():
                 for line in result.stdout.strip().split('\n'):
