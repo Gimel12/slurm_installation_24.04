@@ -603,6 +603,103 @@ def storage_page():
     storage = get_storage_info()
     return render_template('storage.html', storage=storage, page='storage')
 
+@app.route('/gpus')
+def gpus_page():
+    """GPU monitoring view - shows all GPUs across all nodes."""
+    gpu_nodes = []
+    total_gpus = 0
+    available_gpus = 0
+    in_use_gpus = 0
+    
+    # Get nodes with GPU info from Slurm
+    nodes = get_nodes_detailed()
+    
+    for node in nodes:
+        node_name = node.get('NodeName', '')
+        gres = node.get('Gres', '')
+        
+        if 'gpu' not in gres.lower():
+            continue
+        
+        # Parse GPU count and type from Gres field
+        gpu_count = 0
+        gpu_type = 'Unknown'
+        try:
+            for part in gres.split(','):
+                if 'gpu' in part.lower():
+                    gpu_parts = part.split(':')
+                    if len(gpu_parts) >= 3:
+                        gpu_type = gpu_parts[1]
+                        gpu_count = int(gpu_parts[2].split('(')[0])
+                    elif len(gpu_parts) >= 2:
+                        gpu_count = int(gpu_parts[1].split('(')[0])
+        except:
+            pass
+        
+        total_gpus += gpu_count
+        
+        # Get GPU allocation info
+        gres_used = node.get('GresUsed', '')
+        gpus_allocated = 0
+        try:
+            for part in gres_used.split(','):
+                if 'gpu' in part.lower():
+                    gpu_parts = part.split(':')
+                    if len(gpu_parts) >= 2:
+                        gpus_allocated = int(gpu_parts[-1].split('(')[0])
+        except:
+            pass
+        
+        in_use_gpus += gpus_allocated
+        available_gpus += (gpu_count - gpus_allocated)
+        
+        # Get node state
+        state = node.get('State', 'unknown').lower()
+        
+        # Try to get detailed GPU info via SSH
+        gpu_details = []
+        node_addr = node.get('NodeAddr', node_name)
+        
+        # For now, try to get GPU info - this works for accessible nodes
+        try:
+            cmd = f"ssh -o ConnectTimeout=3 -o StrictHostKeyChecking=no {node_addr} 'nvidia-smi --query-gpu=index,name,temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw --format=csv,noheader,nounits' 2>/dev/null"
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
+            if result.returncode == 0 and result.stdout.strip():
+                for line in result.stdout.strip().split('\n'):
+                    parts = [p.strip() for p in line.split(',')]
+                    if len(parts) >= 7:
+                        mem_used = int(float(parts[4])) if parts[4] else 0
+                        mem_total = int(float(parts[5])) if parts[5] else 1
+                        mem_percent = round((mem_used / mem_total) * 100, 1) if mem_total > 0 else 0
+                        gpu_details.append({
+                            'index': parts[0],
+                            'name': parts[1],
+                            'temperature': int(float(parts[2])) if parts[2] else 0,
+                            'utilization': int(float(parts[3])) if parts[3] else 0,
+                            'memory_used': mem_used,
+                            'memory_total': mem_total,
+                            'memory_percent': mem_percent,
+                            'power_draw': int(float(parts[6])) if parts[6] else 0
+                        })
+        except:
+            pass
+        
+        gpu_nodes.append({
+            'name': node_name,
+            'gpu_count': gpu_count,
+            'gpu_type': gpu_type,
+            'state': state,
+            'gpus': gpu_details
+        })
+    
+    return render_template('gpus.html', 
+                          gpu_nodes=gpu_nodes,
+                          total_gpus=total_gpus,
+                          available_gpus=available_gpus,
+                          in_use_gpus=in_use_gpus,
+                          nodes_with_gpus=len(gpu_nodes),
+                          page='gpus')
+
 @app.route('/deploy')
 def deploy_page():
     """Worker deployment view."""

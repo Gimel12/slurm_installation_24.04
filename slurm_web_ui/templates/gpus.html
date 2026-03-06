@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}GPU Monitoring - Slurm Manager{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-2xl font-bold">GPU Monitoring</h1>
+    <p class="text-gray-400">Real-time GPU status across all cluster nodes</p>
+</div>
+
+<!-- GPU Summary Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+    <div class="stat-card p-5">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-400">Total GPUs</p>
+                <p class="text-3xl font-bold text-white">{{ total_gpus }}</p>
+            </div>
+            <div class="w-12 h-12 bg-purple-500/20 rounded-xl flex items-center justify-center">
+                <i class="fas fa-microchip text-purple-400 text-xl"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card p-5">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-400">Available</p>
+                <p class="text-3xl font-bold text-green-400">{{ available_gpus }}</p>
+            </div>
+            <div class="w-12 h-12 bg-green-500/20 rounded-xl flex items-center justify-center">
+                <i class="fas fa-check-circle text-green-400 text-xl"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card p-5">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-400">In Use</p>
+                <p class="text-3xl font-bold text-blue-400">{{ in_use_gpus }}</p>
+            </div>
+            <div class="w-12 h-12 bg-blue-500/20 rounded-xl flex items-center justify-center">
+                <i class="fas fa-bolt text-blue-400 text-xl"></i>
+            </div>
+        </div>
+    </div>
+    <div class="stat-card p-5">
+        <div class="flex items-center justify-between">
+            <div>
+                <p class="text-sm text-gray-400">Nodes with GPUs</p>
+                <p class="text-3xl font-bold text-white">{{ nodes_with_gpus }}</p>
+            </div>
+            <div class="w-12 h-12 bg-gray-500/20 rounded-xl flex items-center justify-center">
+                <i class="fas fa-server text-gray-400 text-xl"></i>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- GPU Details by Node -->
+{% for node in gpu_nodes %}
+<div class="card p-6 mb-6">
+    <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                <i class="fas fa-server text-white"></i>
+            </div>
+            <div>
+                <h2 class="text-lg font-bold">{{ node.name }}</h2>
+                <p class="text-sm text-gray-400">{{ node.gpu_count }} x {{ node.gpu_type }}</p>
+            </div>
+        </div>
+        <span class="status-badge {% if node.state == 'idle' %}status-idle{% elif node.state == 'allocated' or node.state == 'mixed' %}status-alloc{% else %}status-down{% endif %}">
+            {{ node.state }}
+        </span>
+    </div>
+    
+    {% if node.gpus %}
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {% for gpu in node.gpus %}
+        <div class="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-4 border border-slate-700">
+            <div class="flex items-center justify-between mb-3">
+                <span class="text-sm font-semibold text-gray-300">GPU {{ gpu.index }}</span>
+                <span class="text-xs px-2 py-1 rounded-full {% if gpu.utilization < 10 %}bg-green-500/20 text-green-400{% elif gpu.utilization < 80 %}bg-blue-500/20 text-blue-400{% else %}bg-red-500/20 text-red-400{% endif %}">
+                    {{ gpu.utilization }}% util
+                </span>
+            </div>
+            
+            <p class="text-xs text-gray-500 mb-3 truncate" title="{{ gpu.name }}">{{ gpu.name }}</p>
+            
+            <!-- Utilization Bar -->
+            <div class="mb-3">
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="text-gray-400">Utilization</span>
+                    <span class="text-gray-300">{{ gpu.utilization }}%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill {% if gpu.utilization < 50 %}bg-green-500{% elif gpu.utilization < 80 %}bg-yellow-500{% else %}bg-red-500{% endif %}" style="width: {{ gpu.utilization }}%"></div>
+                </div>
+            </div>
+            
+            <!-- Memory Bar -->
+            <div class="mb-3">
+                <div class="flex justify-between text-xs mb-1">
+                    <span class="text-gray-400">Memory</span>
+                    <span class="text-gray-300">{{ gpu.memory_used }} / {{ gpu.memory_total }} MB</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill bg-purple-500" style="width: {{ gpu.memory_percent }}%"></div>
+                </div>
+            </div>
+            
+            <!-- Temperature & Power -->
+            <div class="flex justify-between text-xs">
+                <div class="flex items-center gap-1">
+                    <i class="fas fa-thermometer-half {% if gpu.temperature < 60 %}text-green-400{% elif gpu.temperature < 80 %}text-yellow-400{% else %}text-red-400{% endif %}"></i>
+                    <span class="{% if gpu.temperature < 60 %}text-green-400{% elif gpu.temperature < 80 %}text-yellow-400{% else %}text-red-400{% endif %}">{{ gpu.temperature }}°C</span>
+                </div>
+                <div class="flex items-center gap-1">
+                    <i class="fas fa-bolt text-yellow-400"></i>
+                    <span class="text-gray-300">{{ gpu.power_draw }}W</span>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="bg-slate-800 rounded-lg p-4 text-center text-gray-400">
+        <i class="fas fa-exclamation-circle mb-2"></i>
+        <p>Unable to fetch GPU details. Node may be offline or nvidia-smi unavailable.</p>
+    </div>
+    {% endif %}
+</div>
+{% endfor %}
+
+{% if not gpu_nodes %}
+<div class="card p-8 text-center">
+    <i class="fas fa-microchip text-4xl text-gray-600 mb-4"></i>
+    <h3 class="text-xl font-semibold mb-2">No GPU Nodes Found</h3>
+    <p class="text-gray-400">No nodes with GPUs are currently registered in the cluster.</p>
+</div>
+{% endif %}
+
+<!-- Auto-refresh note -->
+<div class="text-center text-sm text-gray-500 mt-4">
+    <i class="fas fa-sync-alt mr-1"></i>
+    GPU data refreshes every 30 seconds
+</div>
+{% endblock %}
