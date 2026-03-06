@@ -14,3 +14,8 @@ __pycache__/
 .idea/
 .vscode/
 .DS_Store
+
+# Virtual environments
+venv/
+.venv/
+env/
