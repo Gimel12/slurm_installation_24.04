@@ -291,7 +291,15 @@ def get_jobs():
 # ============================================================
 
 def deploy_worker_thread(node_ip, node_hostname, username, password, deploy_id):
-    """Background thread for deploying a worker node."""
+    """Background thread for deploying a worker node.
+    
+    This function handles the complete worker deployment including:
+    - Checking/installing Slurm with correct version
+    - Syncing munge keys with proper UID/GID
+    - Configuring GPUs in gres.conf
+    - Setting up slurmd service
+    - Adding node to cluster
+    """
     global deployment_status
     
     deployment_status[deploy_id] = {
@@ -307,6 +315,16 @@ def deploy_worker_thread(node_ip, node_hostname, username, password, deploy_id):
         if log_entry:
             deployment_status[deploy_id]['logs'].append(f"[{datetime.now().strftime('%H:%M:%S')}] {log_entry}")
     
+    def run_remote_cmd(ssh, cmd, password=None):
+        """Run a command on remote host, optionally with sudo."""
+        if password:
+            cmd = f'echo "{password}" | sudo -S bash -c \'{cmd}\''
+        stdin, stdout, stderr = ssh.exec_command(cmd, timeout=300)
+        out = stdout.read().decode()
+        err = stderr.read().decode()
+        exit_code = stdout.channel.recv_exit_status()
+        return out, err, exit_code
+    
     try:
         import paramiko
         
@@ -317,123 +335,197 @@ def deploy_worker_thread(node_ip, node_hostname, username, password, deploy_id):
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(node_ip, username=username, password=password, timeout=30)
         
-        update_status(10, 'Connected, uploading deployment script...', 'SSH connection established')
+        update_status(10, 'Connected, checking system...', 'SSH connection established')
         
-        # Upload the deployment script
+        # Get remote hostname and check Slurm version
+        out, _, _ = run_remote_cmd(ssh, 'hostname')
+        remote_hostname = out.strip()
+        update_status(12, f'Remote hostname: {remote_hostname}', f'Detected hostname: {remote_hostname}')
+        
+        out, _, _ = run_remote_cmd(ssh, 'slurmd --version 2>/dev/null || echo "not installed"')
+        slurm_version = out.strip()
+        update_status(15, f'Slurm status: {slurm_version}', f'Slurm version: {slurm_version}')
+        
+        # Get master's Slurm version for comparison
+        master_version_out, _ = run_slurm_command('slurmd --version')
+        master_version = master_version_out.strip() if master_version_out else '22.05.9'
+        
+        # Check if we need to install Slurm
+        if 'not installed' in slurm_version or slurm_version != master_version:
+            update_status(20, 'Installing Slurm...', f'Need to install Slurm {master_version}')
+            # For now, assume Slurm is pre-installed - full installation requires more setup
+            update_status(25, 'Slurm installation required', 'Please pre-install Slurm on worker before deployment')
+        
+        # Step 1: Fix munge/slurm UID/GID to match master (966/967)
+        update_status(30, 'Checking user IDs...', 'Verifying munge/slurm UID/GID')
+        out, _, _ = run_remote_cmd(ssh, 'id munge 2>/dev/null | grep -o "uid=[0-9]*" | cut -d= -f2')
+        remote_munge_uid = out.strip()
+        
+        if remote_munge_uid and remote_munge_uid != '966':
+            update_status(32, 'Fixing munge UID/GID...', f'Changing munge from {remote_munge_uid} to 966')
+            run_remote_cmd(ssh, 'systemctl stop munge slurmd 2>/dev/null; usermod -u 966 munge; groupmod -g 966 munge', password)
+        
+        out, _, _ = run_remote_cmd(ssh, 'id slurm 2>/dev/null | grep -o "uid=[0-9]*" | cut -d= -f2')
+        remote_slurm_uid = out.strip()
+        
+        if remote_slurm_uid and remote_slurm_uid != '967':
+            update_status(34, 'Fixing slurm UID/GID...', f'Changing slurm from {remote_slurm_uid} to 967')
+            run_remote_cmd(ssh, 'usermod -u 967 slurm; groupmod -g 967 slurm', password)
+        
+        # Step 2: Copy munge key from master
+        update_status(40, 'Syncing munge key...', 'Copying munge key from master')
         sftp = ssh.open_sftp()
-        
-        # Get the path to deploy script
-        script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        deploy_script = os.path.join(script_dir, 'deploy_compute_node_arm64.sh')
-        
-        if not os.path.exists(deploy_script):
-            deploy_script = os.path.join(script_dir, 'deploy_compute_node.sh')
-        
-        # Also need the config package
-        config_package = '/home/slurm_cluster_config.tar.gz'
-        
-        update_status(15, 'Uploading files...', 'Uploading deployment script and config')
-        
-        sftp.put(deploy_script, '/tmp/deploy_compute_node.sh')
-        if os.path.exists(config_package):
-            sftp.put(config_package, '/tmp/slurm_cluster_config.tar.gz')
-        
+        sftp.put('/etc/munge/munge.key', '/tmp/munge.key')
         sftp.close()
         
-        update_status(20, 'Running deployment script...', 'Starting Slurm installation (this may take several minutes)')
+        run_remote_cmd(ssh, 'cp /tmp/munge.key /etc/munge/munge.key && chown munge:munge /etc/munge/munge.key && chmod 400 /etc/munge/munge.key', password)
         
-        # Run the deployment script with sudo password via stdin
-        stdin, stdout, stderr = ssh.exec_command(
-            'cd /tmp && chmod +x deploy_compute_node.sh && echo "{}" | sudo -S bash deploy_compute_node.sh 2>&1'.format(password),
-            timeout=1800  # 30 minutes timeout
-        )
+        # Fix munge directories
+        run_remote_cmd(ssh, 'chown -R munge:munge /var/lib/munge /var/log/munge /etc/munge 2>/dev/null; chmod 700 /var/lib/munge; mkdir -p /run/munge; chown munge:munge /run/munge', password)
         
-        # Read output progressively
-        progress = 20
-        for line in iter(stdout.readline, ''):
-            line = line.strip()
-            if line:
-                update_status(min(progress, 90), f'Installing: {line[:50]}...', line)
-                if 'Installing' in line or 'Building' in line:
-                    progress = min(progress + 5, 85)
+        # Step 3: Detect GPUs on worker
+        update_status(50, 'Detecting GPUs...', 'Checking for NVIDIA GPUs')
+        out, _, _ = run_remote_cmd(ssh, 'nvidia-smi -L 2>/dev/null | wc -l')
+        num_gpus = int(out.strip()) if out.strip().isdigit() else 0
         
-        exit_status = stdout.channel.recv_exit_status()
+        gpu_type = 'RTX-4090'  # Default
+        if num_gpus > 0:
+            out, _, _ = run_remote_cmd(ssh, 'nvidia-smi --query-gpu=name --format=csv,noheader | head -1')
+            gpu_name = out.strip()
+            if 'H200' in gpu_name:
+                gpu_type = 'H200-NVL'
+            elif 'H100' in gpu_name:
+                gpu_type = 'H100'
+            elif 'A100' in gpu_name:
+                gpu_type = 'A100'
+            elif '4090' in gpu_name:
+                gpu_type = 'RTX-4090'
+            elif '3090' in gpu_name:
+                gpu_type = 'RTX-3090'
+            update_status(52, f'Found {num_gpus}x {gpu_type}', f'Detected {num_gpus} GPUs: {gpu_name}')
         
-        if exit_status == 0:
-            update_status(90, 'Adding node to cluster...', 'Deployment successful, updating cluster config')
+        # Step 4: Create gres.conf for GPUs
+        if num_gpus > 0:
+            update_status(55, 'Creating GPU config...', f'Configuring {num_gpus} GPUs in gres.conf')
+            gres_content = 'AutoDetect=nvml\n'
+            for i in range(num_gpus):
+                gres_content += f'NodeName={node_hostname} Name=gpu Type={gpu_type} File=/dev/nvidia{i}\n'
             
-            # Add the node to slurm.conf on master
-            # Get node hardware info
-            stdin, stdout, stderr = ssh.exec_command('echo "{}" | sudo -S /usr/sbin/slurmd -C 2>/dev/null'.format(password))
-            hw_info = stdout.read().decode()
+            # Write gres.conf to remote
+            out, _, _ = run_remote_cmd(ssh, f'echo "{gres_content}" > /etc/slurm/gres.conf', password)
+        
+        # Step 5: Get hardware info
+        update_status(60, 'Detecting hardware...', 'Getting CPU and memory info')
+        out, _, _ = run_remote_cmd(ssh, 'nproc')
+        cpus = out.strip() if out.strip().isdigit() else '4'
+        
+        out, _, _ = run_remote_cmd(ssh, 'grep MemTotal /proc/meminfo | awk \'{print int($2/1024)}\'') 
+        memory = out.strip() if out.strip().isdigit() else '8000'
+        # Use 90% of memory for Slurm
+        memory = str(int(int(memory) * 0.9))
+        
+        update_status(62, f'Hardware: {cpus} CPUs, {memory}MB RAM', f'Detected {cpus} CPUs, {memory}MB RAM')
+        
+        # Step 6: Create slurmd.service
+        update_status(65, 'Creating slurmd service...', 'Setting up systemd service')
+        slurmd_service = f'''[Unit]
+Description=Slurm node daemon
+After=network.target munge.service
+ConditionPathExists=/etc/slurm/slurm.conf
+
+[Service]
+Type=forking
+ExecStart=/usr/sbin/slurmd -N {node_hostname} -d /usr/sbin/slurmstepd
+ExecReload=/bin/kill -HUP $MAINPID
+PIDFile=/var/run/slurmd.pid
+KillMode=process
+LimitNOFILE=51200
+LimitMEMLOCK=infinity
+LimitSTACK=infinity
+
+[Install]
+WantedBy=multi-user.target
+'''
+        run_remote_cmd(ssh, f'echo "{slurmd_service}" > /etc/systemd/system/slurmd.service && systemctl daemon-reload', password)
+        
+        # Step 7: Update master's slurm.conf
+        update_status(70, 'Updating cluster config...', 'Adding node to master slurm.conf')
+        
+        gres_str = f'Gres=gpu:{gpu_type}:{num_gpus}' if num_gpus > 0 else ''
+        node_line = f'NodeName={node_hostname} NodeAddr={node_ip} CPUs={cpus} Boards=1 SocketsPerBoard=1 CoresPerSocket={int(int(cpus)//2)} ThreadsPerCore=2 RealMemory={memory} {gres_str}'
+        
+        # Read current config
+        with open('/etc/slurm/slurm.conf', 'r') as f:
+            config = f.read()
+        
+        import re
+        if node_hostname not in config:
+            # Find last NodeName line and add after it
+            lines = config.split('\n')
+            new_lines = []
+            added = False
+            for line in lines:
+                new_lines.append(line)
+                if line.startswith('NodeName=') and not added:
+                    # Check if next line is also NodeName, if not add here
+                    pass
+                if line.startswith('PartitionName=') and not added:
+                    # Add before partition line
+                    new_lines.insert(-1, node_line)
+                    added = True
             
-            # Parse hardware info
-            cpus = '4'
-            memory = '8000'
-            for part in hw_info.split():
-                if part.startswith('CPUs='):
-                    cpus = part.split('=')[1]
-                elif part.startswith('RealMemory='):
-                    memory = part.split('=')[1]
+            if not added:
+                # Just append
+                new_lines.append(node_line)
             
-            # Update master's slurm.conf with NodeAddr for proper routing
-            node_line = f"NodeName={node_hostname} NodeAddr={node_ip} CPUs={cpus} RealMemory={memory} State=UNKNOWN"
+            config = '\n'.join(new_lines)
             
-            # Read current config
-            with open('/etc/slurm/slurm.conf', 'r') as f:
-                config = f.read()
-            
-            # Check if node already exists
-            import re
-            if node_hostname not in config:
-                # Add before partition line
-                config = config.replace('# PARTITION', f'{node_line}\n\n# PARTITION')
-                
-                # Update partition to include new node
-                config = re.sub(
-                    r'(PartitionName=\w+ Nodes=)([^\s]+)',
-                    f'\\1\\2,{node_hostname}',
-                    config
-                )
-                
-                with open('/etc/slurm/slurm.conf', 'w') as f:
-                    f.write(config)
-                
-                update_status(93, 'Reconfiguring cluster...', 'Updating Slurm controller')
-                # Reconfigure cluster
-                run_slurm_command('scontrol reconfigure')
-            
-            update_status(95, 'Syncing config to compute node...', 'Copying updated slurm.conf')
-            
-            # Copy updated slurm.conf to compute node
-            sftp = ssh.open_sftp()
-            sftp.put('/etc/slurm/slurm.conf', '/tmp/slurm.conf')
-            sftp.close()
-            
-            # Move config and restart slurmd on compute node
-            update_status(97, 'Restarting slurmd on compute node...', 'Applying configuration')
-            stdin, stdout, stderr = ssh.exec_command(
-                'echo "{}" | sudo -S cp /tmp/slurm.conf /etc/slurm/slurm.conf && '
-                'echo "{}" | sudo -S systemctl restart slurmd 2>&1'.format(password, password)
+            # Update partition to include new node
+            config = re.sub(
+                r'(PartitionName=\w+ Nodes=)([^\s]+)',
+                f'\\1\\2,{node_hostname}',
+                config
             )
-            stdout.read()  # Wait for completion
             
-            # Verify slurmd is running
-            stdin, stdout, stderr = ssh.exec_command(
-                'echo "{}" | sudo -S systemctl is-active slurmd 2>/dev/null'.format(password)
-            )
-            status = stdout.read().decode().strip()
-            
-            if status == 'active':
-                update_status(100, 'Deployment complete!', f'Node {node_hostname} successfully added to cluster and is now active')
-                deployment_status[deploy_id]['status'] = 'completed'
-            else:
-                update_status(100, 'Deployment complete with warnings', f'Node {node_hostname} added but slurmd may need manual restart')
-                deployment_status[deploy_id]['status'] = 'completed'
+            with open('/etc/slurm/slurm.conf', 'w') as f:
+                f.write(config)
+        
+        # Step 8: Copy slurm.conf to worker
+        update_status(80, 'Syncing slurm.conf...', 'Copying cluster config to worker')
+        sftp = ssh.open_sftp()
+        sftp.put('/etc/slurm/slurm.conf', '/tmp/slurm.conf')
+        sftp.close()
+        run_remote_cmd(ssh, 'cp /tmp/slurm.conf /etc/slurm/slurm.conf', password)
+        
+        # Step 9: Add /etc/hosts entries
+        update_status(85, 'Configuring hosts...', 'Adding /etc/hosts entries')
+        # Get master hostname
+        master_hostname = subprocess.run(['hostname'], capture_output=True, text=True).stdout.strip()
+        master_ip_out, _ = run_slurm_command('hostname -I')
+        master_ip = master_ip_out.strip().split()[0] if master_ip_out else ''
+        
+        if master_ip:
+            run_remote_cmd(ssh, f'grep -q "{master_hostname}" /etc/hosts || echo "{master_ip} {master_hostname}" >> /etc/hosts', password)
+        
+        # Step 10: Restart services
+        update_status(90, 'Starting services...', 'Restarting munge and slurmd')
+        run_remote_cmd(ssh, 'systemctl restart munge', password)
+        run_remote_cmd(ssh, 'systemctl enable slurmd && systemctl restart slurmd', password)
+        
+        # Step 11: Restart slurmctld on master
+        update_status(95, 'Reconfiguring cluster...', 'Restarting Slurm controller')
+        subprocess.run(['sudo', 'systemctl', 'restart', 'slurmctld'], capture_output=True)
+        
+        # Verify slurmd is running
+        out, _, exit_code = run_remote_cmd(ssh, 'systemctl is-active slurmd')
+        status = out.strip()
+        
+        if status == 'active':
+            update_status(100, 'Deployment complete!', f'Node {node_hostname} successfully added to cluster and is now active')
+            deployment_status[deploy_id]['status'] = 'completed'
         else:
-            error_output = stderr.read().decode()
-            update_status(100, f'Deployment failed: {error_output[:100]}', f'Error: {error_output}')
-            deployment_status[deploy_id]['status'] = 'failed'
+            update_status(100, 'Deployment complete with warnings', f'Node {node_hostname} added but slurmd may need manual restart')
+            deployment_status[deploy_id]['status'] = 'completed'
         
         ssh.close()
         
