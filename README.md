@@ -1,44 +1,103 @@
-# Automated Slurm Installation for Single-Node with GPU Support
+# Bizon Slurm Cluster Manager
 
-This repository contains a set of scripts to automate the installation and configuration of a single-node Slurm cluster on Ubuntu 24.04. The installation is designed to be modular and hardware-aware, automatically detecting and configuring the system's CPUs, memory, and NVIDIA GPUs.
+A comprehensive solution for automated Slurm cluster installation, configuration, and management on Ubuntu 24.04. Supports both **single-node** and **multi-node** clusters with full **NVIDIA GPU** scheduling and a modern **Web UI** for cluster management.
 
 ## Features
 
-- **Automated Installation**: Installs Slurm 24.05.2 and its dependencies from source.
-- **Hardware-Aware**: Automatically detects CPU cores, system memory, and the number and model of NVIDIA GPUs.
-- **Dynamic Configuration**: Generates `slurm.conf`, `gres.conf`, and `cgroup.conf` based on the detected hardware.
-- **GPU Support**: Configures Slurm's Generic Resource Scheduling (GRES) to manage and schedule jobs on GPUs, including specifying the GPU model type.
-- **Cleanup**: Includes a function to purge previous Slurm installations to ensure a clean setup.
-- **Verification Script**: Provides a ready-to-use sbatch script to test the GPU allocation and functionality.
+### Core Features
+- **Automated Installation**: Installs Slurm 24.05.2 and dependencies from source
+- **Multi-Architecture**: Supports both **x86_64** and **ARM64** systems
+- **Hardware-Aware**: Auto-detects CPUs, memory, and NVIDIA GPUs
+- **GPU Scheduling**: Full GRES support for GPU workloads with model-specific configuration
+- **Multi-Node Support**: Deploy and manage clusters with multiple compute nodes
+- **NFS Integration**: Automatic shared `/home` directory setup across nodes
+
+### Web UI Features
+- **Modern Dashboard**: Real-time cluster stats, node status, job queue
+- **Node Management**: View detailed node info, drain/resume nodes
+- **Job Management**: Submit, monitor, and cancel jobs from browser
+- **Worker Deployment**: Add new compute nodes via SSH directly from Web UI
+- **Interactive Terminal**: Full xterm.js terminal with WebSocket - run `htop`, `vim`, etc.
+- **Fullscreen Mode**: Expand terminal to full screen (ESC to exit)
+- **GPU Monitoring**: View GPU allocation and status per node
+- **Storage Overview**: NFS mounts and disk usage display
 
 ## Prerequisites
 
-Before running the installation script, ensure your system meets the following requirements:
-
-1.  **Operating System**: Ubuntu 24.04 LTS.
-2.  **NVIDIA Drivers**: A compatible NVIDIA driver must be installed and functional. You can verify this by running `nvidia-smi`.
-3.  **Internet Connection**: Required to download the Slurm source code and dependencies.
-4.  **Root Privileges**: The script requires `sudo` access to install packages and configure system services.
+1. **Operating System**: Ubuntu 24.04 LTS
+2. **NVIDIA Drivers**: Must be installed and functional (`nvidia-smi` should work)
+3. **Internet Connection**: Required to download Slurm source and dependencies
+4. **Root Privileges**: Scripts require `sudo` access
+5. **SSH Access** (for multi-node): Passwordless or password-based SSH between nodes
 
 ## Scripts
 
-- `install.sh`: The main installation script. It performs the cleanup, dependency installation, Slurm build, and configuration.
-- `run_gpu_burn_test.sbatch`: A Slurm batch script to verify that GPU resources are correctly allocated and functional.
+| Script | Description |
+|--------|-------------|
+| `install.sh` | Main installation for x86_64 systems |
+| `install_arm64.sh` | Installation for ARM64 systems |
+| `configure_master_node.sh` | Configure master for multi-node (x86_64) |
+| `configure_master_node_arm64.sh` | Configure master for multi-node (ARM64) |
+| `deploy_compute_node.sh` | Deploy worker node (x86_64) |
+| `deploy_compute_node_arm64.sh` | Deploy worker node (ARM64) |
+| `setup_nfs_server.sh` | Set up NFS server on master |
+| `setup_nfs_client.sh` | Set up NFS client on workers |
+| `run_gpu_burn_test.sbatch` | GPU verification test script |
 
-## Installation
+---
 
-1.  **Clone the repository or download the scripts** to your target machine.
+## Quick Start: Single-Node Installation
 
-2.  **Make the installation script executable**:
-    ```bash
-    chmod +x install.sh
-    ```
+```bash
+git clone https://github.com/Gimel12/slurm_installation_24.04.git
+cd slurm_installation_24.04
 
-3.  **Run the installation script**:
-    ```bash
-    sudo ./install.sh
-    ```
-    The script will run non-interactively, performing all necessary steps automatically.
+# For x86_64
+sudo ./install.sh
+
+# For ARM64
+sudo ./install_arm64.sh
+```
+
+---
+
+## Quick Start: Multi-Node Cluster
+
+### Step 1: Install on Master Node
+
+```bash
+git clone https://github.com/Gimel12/slurm_installation_24.04.git
+cd slurm_installation_24.04
+
+# Install Slurm
+sudo ./install.sh          # x86_64
+# OR
+sudo ./install_arm64.sh    # ARM64
+
+# Configure for multi-node
+sudo ./configure_master_node.sh          # x86_64
+# OR
+sudo ./configure_master_node_arm64.sh    # ARM64
+```
+
+### Step 2: Launch Web UI
+
+```bash
+cd slurm_web_ui
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python3 app.py
+```
+
+Access at: **http://<master-ip>:5000**
+
+### Step 3: Add Workers via Web UI
+
+1. Navigate to **Deploy** in the Web UI
+2. Enter worker hostname/IP, SSH username, and password
+3. Click **Deploy Worker**
+4. The system will automatically install Slurm, configure GPUs, and join the cluster
 
 ## Verification
 
@@ -77,29 +136,95 @@ After the installation is complete, follow these steps to verify that Slurm is r
 
 ---
 
-## Web Interface
+## Web UI
 
-This project includes a lightweight web interface built with Flask to provide an intuitive way to manage the Slurm cluster. It allows users to view node and job status, submit new jobs, and cancel existing jobs from a web browser.
+The Bizon Slurm Manager includes a comprehensive web interface built with Flask, Tailwind CSS, and xterm.js.
 
-### Running the Web Interface
+### Features
 
-1.  **Navigate to the UI directory**:
-    ```bash
-    cd slurm_web_ui
-    ```
+| Page | Description |
+|------|-------------|
+| **Dashboard** | Cluster overview, stats, recent jobs, quick actions |
+| **Nodes** | Node list with CPU/memory/GPU usage, drain/resume controls |
+| **Jobs** | Job queue, submit new jobs, cancel running jobs |
+| **Deploy** | Add new worker nodes via SSH |
+| **Storage** | View NFS mounts and disk usage |
+| **Settings** | Edit `slurm.conf`, view cluster configuration |
+| **Node Detail** | Per-node details with **interactive terminal** |
 
-2.  **Install Python Dependencies**:
-    ```bash
-    pip install -r requirements.txt
-    ```
+### Interactive Terminal
 
-3.  **Run the Flask Application**:
-    ```bash
-    python3 app.py
-    ```
+The Web UI includes a full **xterm.js terminal** with WebSocket support:
+- Run any command including interactive ones (`htop`, `vim`, `top`)
+- Full color and cursor support
+- Command history with arrow keys
+- **Fullscreen mode** - click green dot or expand icon (ESC to exit)
+- Works on both local master and remote worker nodes via SSH
 
-4.  **Access the Dashboard**:
+### Running the Web UI
 
-    Once the server is running, you can access the web UI by opening your browser and navigating to:
-    [http://localhost:5000](http://localhost:5000)
+```bash
+cd slurm_web_ui
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python3 app.py
+```
+
+Access at: **http://localhost:5000**
+
+### Running as a Service (Optional)
+
+To run the Web UI as a systemd service:
+
+```bash
+sudo tee /etc/systemd/system/slurm-webui.service << EOF
+[Unit]
+Description=Slurm Web UI
+After=network.target
+
+[Service]
+Type=simple
+User=$USER
+WorkingDirectory=$(pwd)/slurm_web_ui
+ExecStart=$(pwd)/slurm_web_ui/venv/bin/python3 app.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now slurm-webui
+```
+
+---
+
+## GPU Verification
+
+Test GPU allocation with the included test script:
+
+```bash
+sbatch run_gpu_burn_test.sbatch
+```
+
+Check results:
+```bash
+squeue                           # View job status
+cat gpu-burn-<job_id>.out        # View output
+```
+
+---
+
+## Documentation
+
+- `multi-node-guide.md` - Detailed multi-node setup guide
+- `nfs-setup-guide.md` - NFS configuration for shared storage
+- `MULTINODE_QUICKSTART.md` - Quick reference for multi-node deployment
+
+---
+
+## License
+
+Copyright © 2026 Bizon. All rights reserved.
 
